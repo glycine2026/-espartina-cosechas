@@ -89,3 +89,33 @@ def buscar_codigo_campania(campania: str) -> str:
         if campania and campania.strip() in op:
             return op
     return opciones[0] if opciones else ""
+
+import pathlib as _pl
+_INV_PATH = _pl.Path(__file__).resolve().parent.parent / "assets" / "inversores.xlsx"
+
+def _cargar_inversores() -> dict:
+    """Carga el Excel de inversores y devuelve {nombre_lower: cuit}"""
+    try:
+        import pandas as pd, io
+        df = pd.read_excel(str(_INV_PATH), header=0, engine="openpyxl")
+        return {str(row["Name"]).lower().strip(): str(int(row["CUIT"]))
+                for _, row in df.iterrows()
+                if str(row.get("CUIT","")).strip() not in ("","nan")}
+    except Exception:
+        return {}
+
+def buscar_cuit_titular(titular: str) -> str:
+    """Dado el nombre del titular, devuelve su CUIT si existe en inversores.xlsx"""
+    if not titular:
+        return ""
+    inv = _cargar_inversores()
+    t = titular.lower().strip()
+    # Match exacto
+    if t in inv:
+        return inv[t]
+    # Match parcial por palabras clave
+    for nombre, cuit in inv.items():
+        palabras = [p for p in t.split() if len(p) >= 4]
+        if palabras and any(p in nombre for p in palabras):
+            return cuit
+    return ""

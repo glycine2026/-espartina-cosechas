@@ -1,6 +1,6 @@
 import io
 import pandas as pd
-from logic.referencias import buscar_codigo_socio, buscar_codigo_especie, buscar_codigo_campania
+from logic.referencias import buscar_codigo_socio, buscar_codigo_especie, buscar_codigo_campania, buscar_cuit_titular
 
 
 def parsear_monday(raw_bytes: bytes) -> tuple:
