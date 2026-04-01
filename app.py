@@ -412,7 +412,9 @@ if paso == 1:
     if archivo:
         with st.spinner("Procesando archivo..."):
             try:
-                df, meta = parsear_monday(archivo)
+                import io
+                contenido = io.BytesIO(archivo.read())
+                df, meta = parsear_monday(contenido)
                 st.session_state.df_monday = df
                 st.session_state.meta = meta
 
