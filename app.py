@@ -259,6 +259,7 @@ elif paso == 2:
                 ("Contrato", pre.get("Número comprobante contrato","")),
                 ("Fecha",    ctg.get("fecha","")),
                 ("CTG",      pre.get("CTG","")),
+                ("CUIT",     pre.get("CUIT Pagador Flete","")),
             ]
             chips = "".join(
                 f'<span class="chip"><span class="chip-key">{k}</span>'
@@ -348,9 +349,10 @@ elif paso == 2:
                     "_pagador", opts, index=idx, key=f"{form_key}_pagador",
                     label_visibility="collapsed")
             with c2:
-                field_label("CUIT pagador flete")
+                field_label("CUIT pagador flete", monday=True)
+                cuit_pre = pre.get("CUIT Pagador Flete", "")
                 formularios[form_key]["CUIT Pagador Flete"] = st.text_input(
-                    "_cuit", key=f"{form_key}_cuit_pag", label_visibility="collapsed")
+                    "_cuit", value=cuit_pre, key=f"{form_key}_cuit_pag", label_visibility="collapsed")
             with c3:
                 field_label("Tipo de flete")
                 opts_tf = get_opciones("Tipo de Flete")
@@ -404,16 +406,9 @@ elif paso == 2:
                 formularios[form_key]["Código intermediario flete"] = st.selectbox(
                     "_int", opts, key=f"{form_key}_int", label_visibility="collapsed")
 
-            c4, c5 = st.columns(2)
-            with c4:
-                field_label("Carta de porte", req=True)
-                formularios[form_key]["Carta de Porte"] = st.text_input(
-                    "_cpe", key=f"{form_key}_cpe", label_visibility="collapsed")
-            with c5:
-                field_label("% Humedad destino")
-                formularios[form_key]["% Humedad Destino"] = st.number_input(
-                    "_hum_d", min_value=0.0, max_value=40.0, step=0.1, format="%.1f",
-                    key=f"{form_key}_hum_d", label_visibility="collapsed")
+            field_label("Carta de porte", req=True)
+            formularios[form_key]["Carta de Porte"] = st.text_input(
+                "_cpe", key=f"{form_key}_cpe", label_visibility="collapsed")
 
             # ── CATAC ──
             sec("CATAC y distancias")
