@@ -412,7 +412,11 @@ if paso == 1:
     if archivo:
         with st.spinner("Procesando archivo..."):
             try:
-                df, meta = parsear_monday(archivo)
+                # Leer bytes directamente del objeto Streamlit
+                raw_bytes = archivo.getvalue()
+                if len(raw_bytes) < 100:
+                    raise ValueError(f"El archivo parece estar vacío ({len(raw_bytes)} bytes). Volvé a subirlo.")
+                df, meta = parsear_monday(raw_bytes)
                 st.session_state.df_monday = df
                 st.session_state.meta = meta
 
