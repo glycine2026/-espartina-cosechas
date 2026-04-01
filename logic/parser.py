@@ -4,17 +4,33 @@ from logic.referencias import buscar_codigo_socio, buscar_codigo_especie, buscar
 
 def _to_bytes(uploaded_file) -> bytes:
     """Convierte cualquier tipo de input a bytes."""
+    # Caso 1: ya son bytes crudos (lo que pasamos desde app.py)
     if isinstance(uploaded_file, (bytes, bytearray)):
         return bytes(uploaded_file)
+    # Caso 2: BytesIO
     if isinstance(uploaded_file, io.BytesIO):
         uploaded_file.seek(0)
-        return uploaded_file.read()
+        data = uploaded_file.read()
+        if not data:
+            raise ValueError("BytesIO vacío")
+        return data
+    # Caso 3: objeto con getvalue (Streamlit UploadedFile)
     if hasattr(uploaded_file, "getvalue"):
-        return uploaded_file.getvalue()
+        data = uploaded_file.getvalue()
+        if not data:
+            raise ValueError("getvalue() devolvió vacío")
+        return data
+    # Caso 4: file-like con read
     if hasattr(uploaded_file, "read"):
-        uploaded_file.seek(0)
-        return uploaded_file.read()
-    raise ValueError(f"Tipo de archivo no soportado: {type(uploaded_file)}")
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+        data = uploaded_file.read()
+        if not data:
+            raise ValueError("read() devolvió vacío")
+        return data
+    raise ValueError(f"Tipo no soportado: {type(uploaded_file)}")
 
 def _ctg_str(val) -> str:
     s = str(val).strip()
