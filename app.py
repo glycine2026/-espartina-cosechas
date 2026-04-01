@@ -93,8 +93,13 @@ div[data-testid="stExpander"] { border:1px solid #dddbd5 !important;
 # ── Helpers ───────────────────────────────────────
 def field_label(texto, monday=False, req=False):
     req_mark = " *" if req else ""
-    monday_mark = " ↩ Monday" if monday else ""
-    st.markdown(f"**{texto}{req_mark}**{monday_mark}")
+    monday_mark = "  ↩ Monday" if monday else ""
+    label = f"{texto}{req_mark}{monday_mark}"
+    st.markdown(
+        f'<p style="font-size:0.78rem;font-weight:600;color:#333;'
+        f'margin:0 0 4px 0;padding:0;line-height:1.2">{label}</p>',
+        unsafe_allow_html=True
+    )
 
 def sec(titulo):
     st.markdown(f'<div class="sec-header">{titulo}</div>', unsafe_allow_html=True)
@@ -259,7 +264,7 @@ elif paso == 2:
                 ("Contrato", pre.get("Número comprobante contrato","")),
                 ("Fecha",    ctg.get("fecha","")),
                 ("CTG",      pre.get("CTG","")),
-                ("CUIT",     pre.get("CUIT Pagador Flete","")),
+                ("CUIT pagador flete", pre.get("CUIT Pagador Flete","")),
             ]
             chips = "".join(
                 f'<span class="chip"><span class="chip-key">{k}</span>'
@@ -458,9 +463,9 @@ elif paso == 2:
                     label_visibility="collapsed")
             with c2:
                 field_label("Numerador CPE")
-                opts = [""] + get_opciones("Numerador CPE")
+                opts_cpe_n = get_opciones("Numerador CPE")
                 formularios[form_key]["Numerador CPE"] = st.selectbox(
-                    "_num_cpe", opts, key=f"{form_key}_num_cpe",
+                    "_num_cpe", opts_cpe_n, index=0, key=f"{form_key}_num_cpe",
                     label_visibility="collapsed")
 
             # ── Opcionales ──
