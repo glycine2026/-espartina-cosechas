@@ -1,11 +1,7 @@
 import io
 import re
-import pathlib
-import pandas as pd
 from openpyxl import load_workbook
-
-BASE_DIR = pathlib.Path(__file__).parent.parent
-TEMPLATE_PATH = BASE_DIR / "assets" / "ImportacionCosecha_template.xlsx"
+from logic.referencias import get_template_bytes, extraer_codigo
 
 CAMPOS_CON_CODIGO = {
     "Código tipo de comprobante","Tipo CPE","Numerador CPE","Código socio",
@@ -36,36 +32,38 @@ MAPA = {
     "Código intermediario flete":"Código intermediario flete",
     "Tipo CPE":"Tipo CPE","Numerador CPE":"Numerador CPE",
     "Carta de Porte":"Carta de Porte","CTG":"CTG",
-    "Catac":"Código CATAC","Distancia Planta":"Distancia Planta",
+    "Catac":"Catac","Distancia Planta":"Distancia Planta",
     "Tarifa Catac":"Tarifa Catac","Coeficiente":"Coeficiente","Aforado":"Aforado",
     "Código destino":"Código destino","Código extractor":"Código extractor",
     "Precio Extractor por TN":"Precio Extractor por TN",
 }
 
-def _extraer_codigo(campo, valor):
+def _limpiar(campo, valor):
     if valor is None or str(valor).strip() in ("","nan","None"):
         return ""
     s = str(valor).strip()
-    if campo not in CAMPOS_CON_CODIGO:
-        return s
     if campo == "Chofer (CUIT)":
         m = re.search(r'\(([^)]+)\)', s)
         return m.group(1) if m else s
-    m = re.match(r'^([^\s\-]+)', s)
-    return m.group(1) if m else s
+    if campo in CAMPOS_CON_CODIGO:
+        return extraer_codigo(s)
+    return s
 
 def generar_excel(ctgs_data: list) -> bytes:
-    wb = load_workbook(str(TEMPLATE_PATH))
+    tpl_bytes = get_template_bytes()
+    wb = load_workbook(io.BytesIO(tpl_bytes))
     ws = wb["Cosechas a importar"]
-    header = [str(c).strip() if c else "" for c in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+    header = [str(c).strip() if c else "" for c in
+              next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
     col_idx = {h: i+1 for i, h in enumerate(header) if h}
 
     for row_num, ctg in enumerate(ctgs_data, start=2):
         todos = {**ctg.get("precargado", {}), **ctg.get("formulario", {})}
-        ws.cell(row=row_num, column=col_idx.get("Código tipo de comprobante", 1), value="COSI")
+        if "Código tipo de comprobante" in col_idx:
+            ws.cell(row=row_num, column=col_idx["Código tipo de comprobante"], value="COSI")
         for campo_form, campo_tpl in MAPA.items():
             valor = todos.get(campo_form) or todos.get(campo_tpl, "")
-            limpio = _extraer_codigo(campo_tpl, valor)
+            limpio = _limpiar(campo_tpl, valor)
             if campo_tpl in col_idx and limpio:
                 ws.cell(row=row_num, column=col_idx[campo_tpl], value=limpio)
 

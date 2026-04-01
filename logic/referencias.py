@@ -1,56 +1,69 @@
-import pandas as pd
+import io
 import re
 import pathlib
+import pandas as pd
 from functools import lru_cache
 
-# Ruta absoluta al template — funciona en local y en Streamlit Cloud
-BASE_DIR = pathlib.Path(__file__).parent.parent
-TEMPLATE_PATH = BASE_DIR / "assets" / "ImportacionCosecha_template.xlsx"
+BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
+TEMPLATE_PATH = BASE_DIR / "assets" / "template.xlsx"
+
+def _cargar_bytes_template() -> bytes:
+    """Lee el template desde disco. Falla con mensaje claro si no existe."""
+    if not TEMPLATE_PATH.exists():
+        raise FileNotFoundError(
+            f"No se encontró el template en {TEMPLATE_PATH}. "
+            f"Archivos en assets/: {list((BASE_DIR / 'assets').iterdir()) if (BASE_DIR / 'assets').exists() else 'carpeta no existe'}"
+        )
+    return TEMPLATE_PATH.read_bytes()
 
 @lru_cache(maxsize=1)
-def cargar_referencias():
-    df = pd.read_excel(str(TEMPLATE_PATH), sheet_name="Referencias", header=0, engine="openpyxl")
+def cargar_referencias() -> dict:
+    data = _cargar_bytes_template()
+    df = pd.read_excel(io.BytesIO(data), sheet_name="Referencias", header=0, engine="openpyxl")
     refs = {}
     for col in df.columns:
-        vals = df[col].dropna().tolist()
-        refs[col] = [str(v) for v in vals if str(v).strip()]
+        vals = [str(v) for v in df[col].dropna().tolist() if str(v).strip()]
+        if vals:
+            refs[col] = vals
     return refs
 
+def get_template_bytes() -> bytes:
+    return _cargar_bytes_template()
+
 def get_opciones(campo: str) -> list:
-    refs = cargar_referencias()
-    return refs.get(campo, [])
+    return cargar_referencias().get(campo, [])
 
 def extraer_codigo(valor: str) -> str:
     if not valor:
         return ""
-    match = re.match(r'^([^\s\-]+)', str(valor).strip())
-    return match.group(1) if match else str(valor).strip()
+    m = re.match(r'^([^\s\-]+)', str(valor).strip())
+    return m.group(1) if m else str(valor).strip()
 
 def extraer_codigo_chofer(valor: str) -> str:
-    match = re.search(r'\(([^)]+)\)', str(valor))
-    return match.group(1) if match else valor
+    m = re.search(r'\(([^)]+)\)', str(valor))
+    return m.group(1) if m else valor
 
 def buscar_codigo_socio(titular: str) -> str:
     if not titular:
         return ""
     opciones = get_opciones("Código socio")
-    titular_lower = titular.lower().strip()
+    t = titular.lower().strip()
     for op in opciones:
         partes = op.split(" - ", 1)
         if len(partes) == 2:
             nombre = partes[1].lower()
-            if titular_lower in nombre or nombre in titular_lower:
+            if t in nombre or nombre in t:
                 return op
     for op in opciones:
         partes = op.split(" - ", 1)
         if len(partes) == 2:
             nombre = partes[1].lower()
-            palabras = [p for p in titular_lower.split() if len(p) >= 3]
+            palabras = [p for p in t.split() if len(p) >= 3]
             if palabras and any(p in nombre for p in palabras):
                 return op
     return ""
 
-def buscar_codigo_especie(especie_monday: str) -> str:
+def buscar_codigo_especie(especie: str) -> str:
     MAPA = {
         "girasol comun": "14", "girasol común": "14",
         "girasol alto oleico": "07", "girasol confitero": "09",
@@ -59,14 +72,14 @@ def buscar_codigo_especie(especie_monday: str) -> str:
         "cebada forrajera": "13", "cebada cervecera": "13",
     }
     opciones = get_opciones("Código especie")
-    especie_lower = especie_monday.lower().strip() if especie_monday else ""
-    codigo = MAPA.get(especie_lower, "")
+    e = especie.lower().strip() if especie else ""
+    codigo = MAPA.get(e, "")
     if codigo:
         for op in opciones:
             if re.match(rf'^{codigo}\s*[-–]', op):
                 return op
     for op in opciones:
-        if especie_lower in op.lower():
+        if e in op.lower():
             return op
     return ""
 
