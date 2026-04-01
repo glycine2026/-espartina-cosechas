@@ -338,6 +338,44 @@ div[data-testid="metric-container"] {
 
 
 # ─────────────────────────────────────────────
+#  Helper: fuzzy match contrato
+# ─────────────────────────────────────────────
+def buscar_contrato_fuzzy(contrato_excel: str, opciones: list) -> int:
+    """Devuelve el índice (en opciones) del mejor match para el contrato del Excel."""
+    if not contrato_excel or not opciones:
+        return 0
+    ce = contrato_excel.strip()
+    # 1. Match exacto
+    for j, c in enumerate(opciones):
+        codigo = c.split(" - ")[0]
+        if ce == codigo or ce == c:
+            return j
+    # 2. Contiene la cadena completa
+    for j, c in enumerate(opciones):
+        if ce in c:
+            return j
+    # 3. Match por palabras del prefijo del código
+    palabras_ce = ce.upper().split()
+    best_j, best_score = 0, 0
+    for j, c in enumerate(opciones):
+        if not c:
+            continue
+        codigo_c = c.split(" - ")[0].upper()
+        palabras_c = codigo_c.split()
+        score = 0
+        for p_excel, p_ref in zip(palabras_ce, palabras_c):
+            if p_excel == p_ref:
+                score += 2
+            elif len(p_excel) >= 4 and p_excel[:4] == p_ref[:4]:
+                score += 1
+            else:
+                break
+        if score > best_score:
+            best_score, best_j = score, j
+    return best_j if best_score >= 2 else 0
+
+
+# ─────────────────────────────────────────────
 #  Estado de sesión
 # ─────────────────────────────────────────────
 def init_state():
@@ -501,84 +539,115 @@ elif paso == 2:
 
         with st.expander(titulo_expander, expanded=(i == 0 and not completado)):
 
-            # Banner precarga
-            pre_str = " &nbsp;·&nbsp; ".join([
-                f"<strong>Titular:</strong> {ctg['titular_raw']}",
-                f"<strong>Cód. socio:</strong> {pre.get('Código socio', '—')}",
-                f"<strong>Especie:</strong> {pre.get('Código especie', '—')}",
-                f"<strong>Campaña:</strong> {pre.get('Código campaña', '—')}",
-                f"<strong>CTG:</strong> {pre.get('CTG', '—')}",
-            ])
+            # ── Banner: campos precargados del Excel (verde) vs manuales ──
+            pre_items = [
+                ("Cupo", pre.get("Turno", "—")),
+                ("Titular", ctg["titular_raw"]),
+                ("Cód. socio", pre.get("Código socio", "—")),
+                ("Especie", pre.get("Código especie", "—")),
+                ("Campaña", pre.get("Código campaña", "—")),
+                ("Contrato", pre.get("Número comprobante contrato", "—")),
+                ("Fecha", ctg.get("fecha", "—")),
+                ("CTG", pre.get("CTG", "—")),
+            ]
+            pre_html = " &nbsp;·&nbsp; ".join(
+                f'<span style="color:#1e3a1e"><strong>{k}:</strong></span> <span style="color:#2d5a2d">{v}</span>'
+                for k, v in pre_items if v and v != "—"
+            )
             st.markdown(f"""<div class="precarga-box">
-            Pre-cargado desde Monday: {pre_str}
+            <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#3B6D11">
+            ✦ Precargado automáticamente desde Monday</span><br/><br/>{pre_html}
             </div>""", unsafe_allow_html=True)
 
-            # ── SECCIÓN: Datos del comprobante ──
-            st.markdown('<div class="form-section-title">Comprobante y origen</div>', unsafe_allow_html=True)
+            # Helper para label con indicador de fuente
+            def lbl(texto, fuente_monday=False, requerido=False):
+                badge = ' <span style="font-size:0.6rem;background:#e8f2e0;color:#3B6D11;padding:1px 5px;border-radius:3px;font-weight:600">MONDAY</span>' if fuente_monday else ''
+                req = ' *' if requerido else ''
+                return texto + req + badge
+
+            # ── SECCIÓN: Comprobante ──
+            st.markdown('<div class="form-section-title">Comprobante e identificación</div>', unsafe_allow_html=True)
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                st.text_input("Cupo (turno)", value=pre.get("Turno", ""),
-                              key=f"{form_key}_cupo", disabled=True)
+                st.text_input(lbl("Cupo / turno", fuente_monday=True),
+                              value=pre.get("Turno", ""), key=f"{form_key}_cupo", disabled=True)
             with col2:
-                st.text_input("Fecha", value=ctg.get("fecha", ""),
-                              key=f"{form_key}_fecha", disabled=True)
+                formularios[form_key]["Fecha"] = st.text_input(
+                    lbl("Fecha", fuente_monday=True),
+                    value=ctg.get("fecha", ""), key=f"{form_key}_fecha")
             with col3:
-                opts_socio = [""] + get_opciones("Código socio")
-                idx_socio = next((i for i, o in enumerate(opts_socio) if pre.get("Código socio", "") in o), 0)
-                formularios[form_key]["Código socio"] = st.selectbox(
-                    "Código socio *", opts_socio, index=idx_socio, key=f"{form_key}_socio")
+                st.text_input(lbl("CTG", fuente_monday=True),
+                              value=ctg_id, key=f"{form_key}_ctg_val", disabled=True)
+                formularios[form_key]["CTG"] = ctg_id
 
             col4, col5, col6 = st.columns(3)
             with col4:
-                opts_camp = [""] + get_opciones("Código campaña")
-                idx_camp = next((i for i, o in enumerate(opts_camp) if pre.get("Código campaña", "") in o), 0)
-                formularios[form_key]["Código campaña"] = st.selectbox(
-                    "Código campaña *", opts_camp, index=idx_camp, key=f"{form_key}_camp")
+                opts_socio = [""] + get_opciones("Código socio")
+                idx_socio = next((j for j, o in enumerate(opts_socio) if pre.get("Código socio","") and pre.get("Código socio","") in o), 0)
+                formularios[form_key]["Código socio"] = st.selectbox(
+                    lbl("Código socio", fuente_monday=True, requerido=True),
+                    opts_socio, index=idx_socio, key=f"{form_key}_socio")
             with col5:
-                opts_esp = [""] + get_opciones("Código especie")
-                idx_esp = next((i for i, o in enumerate(opts_esp) if pre.get("Código especie", "") in o), 0)
-                formularios[form_key]["Código especie"] = st.selectbox(
-                    "Código especie *", opts_esp, index=idx_esp, key=f"{form_key}_esp")
+                opts_camp = [""] + get_opciones("Código campaña")
+                idx_camp = next((j for j, o in enumerate(opts_camp) if pre.get("Código campaña","") and pre.get("Código campaña","") in o), 0)
+                formularios[form_key]["Código campaña"] = st.selectbox(
+                    lbl("Código campaña", fuente_monday=True, requerido=True),
+                    opts_camp, index=idx_camp, key=f"{form_key}_camp")
             with col6:
+                opts_esp = [""] + get_opciones("Código especie")
+                idx_esp = next((j for j, o in enumerate(opts_esp) if pre.get("Código especie","") and pre.get("Código especie","") in o), 0)
+                formularios[form_key]["Código especie"] = st.selectbox(
+                    lbl("Código especie", fuente_monday=True, requerido=True),
+                    opts_esp, index=idx_esp, key=f"{form_key}_esp")
+
+            col7, col8, col9 = st.columns(3)
+            with col7:
                 opts_cult = [""] + get_opciones("Código cultivo")
                 formularios[form_key]["Código cultivo"] = st.selectbox(
                     "Código cultivo *", opts_cult, key=f"{form_key}_cult")
-
-            col7, col8 = st.columns(2)
-            with col7:
-                opts_dep_o = [""] + get_opciones("Código depósito")
-                formularios[form_key]["Código depósito origen"] = st.selectbox(
-                    "Código depósito origen", opts_dep_o, key=f"{form_key}_dep_o")
             with col8:
-                opts_dep_d = [""] + get_opciones("Código depósito")
-                formularios[form_key]["Código depósito destino"] = st.selectbox(
-                    "Código depósito destino", opts_dep_d, key=f"{form_key}_dep_d")
+                # Contrato: fuzzy match entre valor del Excel y Referencias
+                contrato_pre = pre.get("Número comprobante contrato", "")
+                opts_contrato = [""] + get_opciones("Código contrato")
+                idx_contrato = buscar_contrato_fuzzy(contrato_pre, opts_contrato)
+                formularios[form_key]["Número comprobante contrato"] = st.selectbox(
+                    lbl("Nro. comprobante contrato", fuente_monday=True, requerido=True),
+                    opts_contrato, index=idx_contrato, key=f"{form_key}_contrato")
+                if idx_contrato > 0 and contrato_pre:
+                    st.caption(f"Excel: `{contrato_pre}` → match automático")
+            with col9:
+                st.write("")
 
             # ── SECCIÓN: Flete ──
             st.markdown('<div class="form-section-title">Flete y pagador</div>', unsafe_allow_html=True)
             col1, col2, col3 = st.columns(3)
             with col1:
                 opts_pag = [""] + get_opciones("Código socio")
+                idx_pag = next((j for j, o in enumerate(opts_pag) if pre.get("Código socio","") and pre.get("Código socio","") in o), 0)
                 formularios[form_key]["Pagador Flete"] = st.selectbox(
-                    "Pagador flete *", opts_pag, key=f"{form_key}_pagador")
+                    lbl("Pagador flete", fuente_monday=True, requerido=True),
+                    opts_pag, index=idx_pag, key=f"{form_key}_pagador")
             with col2:
                 formularios[form_key]["CUIT Pagador Flete"] = st.text_input(
                     "CUIT pagador flete", key=f"{form_key}_cuit_pag")
             with col3:
-                opts_tipo_flete = [""] + get_opciones("Tipo de Flete")
+                opts_tipo_flete = get_opciones("Tipo de Flete")
+                # Default: T - Tercero
+                idx_flete = next((j for j, o in enumerate(opts_tipo_flete) if "Tercero" in o or o.startswith("T")), 0)
                 formularios[form_key]["Tipo de Flete"] = st.selectbox(
-                    "Tipo de flete", opts_tipo_flete, key=f"{form_key}_tipo_flete")
+                    lbl("Tipo de flete", fuente_monday=False),
+                    opts_tipo_flete, index=idx_flete, key=f"{form_key}_tipo_flete")
 
-            # ── SECCIÓN: Pesos ──
+            # ── SECCIÓN: Pesos Origen ──
             st.markdown('<div class="form-section-title">Pesos y humedad — Origen</div>', unsafe_allow_html=True)
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 formularios[form_key]["Peso Origen Bruto"] = st.number_input(
-                    "Peso bruto (kg) *", min_value=0, step=100, key=f"{form_key}_pb")
+                    "Peso bruto (kg) *", min_value=0, value=45000, step=100, key=f"{form_key}_pb")
             with col2:
                 formularios[form_key]["Peso Origen Tara"] = st.number_input(
-                    "Tara (kg) *", min_value=0, step=100, key=f"{form_key}_tara")
+                    "Tara (kg) *", min_value=0, value=15000, step=100, key=f"{form_key}_tara")
             with col3:
                 neto = (formularios[form_key]["Peso Origen Bruto"] or 0) - (formularios[form_key]["Peso Origen Tara"] or 0)
                 formularios[form_key]["Peso Origen Neto"] = neto
@@ -587,23 +656,6 @@ elif paso == 2:
                 formularios[form_key]["% Humedad Origen"] = st.number_input(
                     "% Humedad origen *", min_value=0.0, max_value=40.0, step=0.1, format="%.1f",
                     key=f"{form_key}_hum_o")
-
-            st.markdown('<div class="form-section-title">Pesos y humedad — Destino</div>', unsafe_allow_html=True)
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                formularios[form_key]["Peso Destino Bruto"] = st.number_input(
-                    "Peso bruto destino", min_value=0, step=100, key=f"{form_key}_db")
-            with col2:
-                formularios[form_key]["Peso Destino Tara"] = st.number_input(
-                    "Tara destino", min_value=0, step=100, key=f"{form_key}_dt")
-            with col3:
-                neto_d = (formularios[form_key]["Peso Destino Bruto"] or 0) - (formularios[form_key]["Peso Destino Tara"] or 0)
-                formularios[form_key]["Peso Destino Neto"] = neto_d
-                st.number_input("Peso neto destino", value=neto_d, disabled=True, key=f"{form_key}_dn")
-            with col4:
-                formularios[form_key]["% Humedad Destino"] = st.number_input(
-                    "% Humedad destino", min_value=0.0, max_value=40.0, step=0.1, format="%.1f",
-                    key=f"{form_key}_hum_d")
 
             # ── SECCIÓN: Transporte ──
             st.markdown('<div class="form-section-title">Transporte</div>', unsafe_allow_html=True)
@@ -626,8 +678,9 @@ elif paso == 2:
                 formularios[form_key]["Carta de Porte"] = st.text_input(
                     "Carta de porte *", key=f"{form_key}_cpe")
             with col5:
-                formularios[form_key]["CTG"] = st.text_input(
-                    "CTG", value=ctg_id, key=f"{form_key}_ctg_val", disabled=True)
+                formularios[form_key]["% Humedad Destino"] = st.number_input(
+                    "% Humedad destino", min_value=0.0, max_value=40.0, step=0.1, format="%.1f",
+                    key=f"{form_key}_hum_d")
 
             # ── SECCIÓN: CATAC y distancias ──
             st.markdown('<div class="form-section-title">CATAC y distancias</div>', unsafe_allow_html=True)
@@ -669,7 +722,18 @@ elif paso == 2:
                     "Numerador CPE", opts_num_cpe, key=f"{form_key}_num_cpe")
 
             # ── SECCIÓN OPCIONAL: Embolsado / Extracción ──
-            with st.expander("Opcionales: embolsado, extracción, corredor"):
+            with st.expander("Opcionales: depósitos, embolsado, extracción, corredor"):
+                st.markdown('<div style="font-size:0.75rem;color:#888;margin-bottom:8px">Solo completar si corresponde según el tipo de operación</div>', unsafe_allow_html=True)
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    opts_dep_o = [""] + get_opciones("Código depósito")
+                    formularios[form_key]["Código depósito origen"] = st.selectbox(
+                        "Código depósito origen (solo extracción)", opts_dep_o, key=f"{form_key}_dep_o")
+                with col_d2:
+                    opts_dep_d = [""] + get_opciones("Código depósito")
+                    formularios[form_key]["Código depósito destino"] = st.selectbox(
+                        "Código depósito destino (solo embolsado/rechazo)", opts_dep_d, key=f"{form_key}_dep_d")
+                st.markdown("---")
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     opts_emb = [""] + get_opciones("Código embolsador")
