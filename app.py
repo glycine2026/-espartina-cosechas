@@ -448,7 +448,9 @@ if paso == 1:
                         st.rerun()
 
             except Exception as e:
-                st.error(f"Error al procesar el archivo: {e}")
+                import traceback
+                st.error(f"Error: {e}")
+                st.code(traceback.format_exc())
 
 
 # ═══════════════════════════════════════════════
